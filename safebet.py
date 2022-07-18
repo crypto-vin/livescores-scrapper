@@ -10,7 +10,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 import requests
 import json
-from bs4 import BeautifulSoup
+#from bs4 import BeautifulSoup
+import time
+import csv
+import pandas as pd
 
 class Super_League:
 
@@ -47,16 +50,16 @@ class Super_League:
         
     #Identify the matches
     def get_live_matches(self):
-        home_team_list = []
-        self.home_team_list = home_team_list
-        away_team_list = []
-        self.away_team_list = away_team_list
-        home_score_list = []
-        self.home_score_list = home_score_list
-        away_score_list = []
-        self.away_score_list = away_score_list
-
         while True:
+            home_team_list = []
+            self.home_team_list = home_team_list
+            away_team_list = []
+            self.away_team_list = away_team_list
+            home_score_list = []
+            self.home_score_list = home_score_list
+            away_score_list = []
+            self.away_score_list = away_score_list
+
             try:
                 home_teams = WebDriverWait(self.driver, 10).until(
                         EC.presence_of_all_elements_located((By.XPATH, "//*[@class='event__participant event__participant--home']"))
@@ -88,6 +91,7 @@ class Super_League:
                     for score in away_team_scores:
                         away_score_list.append(score.text)
 
+
                 away_team_total = len(away_team_list)
                 home_score_total = len(home_score_list)
                 away_score_total = len(away_score_list)
@@ -100,27 +104,60 @@ class Super_League:
 
                 if away_team_total != away_score_total or home_score_total != total:
                     print('Results might be erroneous')
+                
+                elif away_team_total != total:
+                    print('Results still erroneous')
 
                 else:
-                    for i in range(0, total):
-                        print(f"{home_team_list[i]} {(home_score_list[i])} -  {(away_score_list[i])} {away_team_list[i]}")
-                    self.driver.quit()
-                    break
+                    with open('new_scores.csv', 'w', newline='') as f:
+                        header = ['Home', 'Home Score', 'Away Score', 'Away']
+                        write = csv.writer(f) 
+                        write.writerow(header) 
+                        for i in range(0, total):
+                            print(f"{home_team_list[i]} {(home_score_list[i])} -  {(away_score_list[i])} {away_team_list[i]}")
+                            data = [[str(home_team_list[i]), str(home_score_list[i]), str(away_score_list[i]), str(away_team_list[i])]]
+                            write.writerows(data)
+
+                    self.ascertain_goal()
+                    #self.driver.quit()
+                    time.sleep(10)
+    
+    #Determine whether a goal has been scored on not
+    def ascertain_goal(self): 
+        score_list = []
+        df1 = pd.read_csv('new_scores.csv')
+        df2 = pd.read_csv('scores.csv')
         
-    def ascertain_goal(self):
-        prev_home_team_list = self.home_team_list
+        df_current = pd.DataFrame(df1)
+        df_previous = pd.DataFrame(df2)
+        
+        df = pd.merge(df_previous, df_current, how='inner', on =['Home', 'Away'])
+        df
 
-    def find_team(self):
-        current_url = self.driver.current_url 
-        print(current_url)
-        page = requests.get(current_url)
-        soup = BeautifulSoup(page.content, "html.parser")
+        total = df[df.columns[0]].count() 
+        print(total)
+        for i in range(0, total):
+            if df['Home Score_x'][i] == (df['Home Score_y'][i]) and df['Away Score_x'][i] == (df['Away Score_y'][i]):
+                #print('No goal')
+                team = df['Home'][i]
+                
+            elif df['Home Score_x'][i] < (df['Home Score_y'][i]):
+                team = df['Home'][i]
+                print(team + ' has scored')
+                score_list.append(team)
+                
+            elif df['Away Score_x'][i] < (df['Away Score_y'][i]):
+                team = df['Away'][i]
+                print(team + ' has scored')
+                score_list.append(team)
 
-        results = soup.find("div")
-        print(results.prettify())
+            else:
+                print('goal disallowed')
+
+        df_current.to_csv('scores.csv', index=False)
 
     
-    def get_data(self):
+    def send_data(self):
         response = requests.get(url=self.sports_url)
         response_data = response.json().get('data')
 
@@ -134,7 +171,6 @@ class Super_League:
     def run(self):
         self.get_site()
         self.get_live_matches()
-        #self.find_team()
         #self.get_data()
 
 if __name__ == '__main__':
