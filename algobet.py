@@ -12,13 +12,13 @@ import sys
 import threading
 from datetime import datetime
 import africastalking
+import math
 
 class Mozzart:
     #initialize Mozzart class
     def __init__(self):
         #self.phone = input('Enter phone number: ')
         #self.password = input('Enter password: ')
-        #self.stake = input('Enter stake: ')
         PATH = "C:\Program Files (x86)\chromedriver.exe"
         chrome_options = webdriver.ChromeOptions()
         chrome_options.add_argument('--disable-gpu')
@@ -31,14 +31,15 @@ class Mozzart:
         chrome_options.add_experimental_option('prefs', {'credentials_enable_service': False, 'profile': {'password_manager_enabled': False }})
         self.driver = webdriver.Chrome(executable_path = PATH, options=chrome_options)
         self.url = 'https://www.mozzartbet.co.ke/en#/live/sport/1'
-        self.stake = 500
+        self.stake = 200
         self.prev_msg = ''
-        self.phone = '0712897106'
-        self.password = 'Vin2am@254'
+        self.phone = '0768804671'
+        self.password = '7840NorTh'
         self.bet_placed = False
         self.similarity = 0.00
         self.recipients = []
         self.possible_win = 0
+        self.cash_out = False
         self.count = 1
         self.HEADER = 64
         port = 5080
@@ -46,7 +47,6 @@ class Mozzart:
         self.SERVER = '127.0.0.1'
         self.ADDR = (self.SERVER, self.PORT)
         self.FORMAT = 'utf-8'
-        self.DISCONNECT_MESSAGE = '!DISCONNECT'
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server.bind(self.ADDR)
         
@@ -71,7 +71,9 @@ class Mozzart:
             print('Unable to locate login section')
         else:
             phone_no.send_keys(phone)
+            time.sleep(5)
             passwrd.send_keys(password)
+            time.sleep(3)
             login.click()
             time.sleep(5)
             try:
@@ -84,11 +86,11 @@ class Mozzart:
     def handle_client(self, conn, addr):
         now = datetime.now().time().replace(microsecond=0).isoformat()
         connected = True
-        if self.count % 5 == 0:
-            try:
-                self.cashout()
-            except:
-                cashout = False
+        try:
+            self.cashout()
+            self.cash_out = True
+        except:
+            self.cash_out = False
         
         while connected:
             self.bet_placed = False
@@ -100,14 +102,11 @@ class Mozzart:
                 start_time = time.time()
                 msg_length = int(msg_length)
                 msg = conn.recv(msg_length).decode(self.FORMAT)
-                if msg == self.DISCONNECT_MESSAGE:
-                    connected = False
-                    sys.exit()
                 if msg == self.prev_msg:
                     break
                 
-                print(f'\nFetched new data at {now}')
-                print(f"New goal detected: {msg}")
+                print(f'\n--- Fetched new Flashscore data at {now} ---')
+                print(f"    New goal detected: {msg}")
             
                 self.strip_msg(msg)
             self.check_matches()
@@ -117,9 +116,6 @@ class Mozzart:
                 if self.similar(self.scorer, team) == True:
                     if self.similarity >= prev_similarity:
                         selected_team = team
-                        index = self.home_list.index(team)
-                        self.total_goals = int(self.total_goals) + int(self.away_score_list[index])
-                        print(f'Goal number: {self.total_goals}')
                         selected = True
                         prev_similarity = self.similarity
 
@@ -127,57 +123,50 @@ class Mozzart:
                 if self.similar(self.scorer, team) == True:
                     if self.similarity >= prev_similarity:
                         selected_team = team
-                        index = self.away_list.index(team)
-                        self.total_goals = int(self.total_goals) + int(self.home_score_list[index])
-                        print(f'Goal number: {self.total_goals}')
                         selected = True
                         prev_similarity = self.similarity
 
             if selected:
-                print(selected_team, self.total_goals)
+                print(f'    {selected_team} to score goal number {self.total_goals}')
+                self.get_balance()
                 self.get_slip(selected_team, int(self.total_goals))
                 if self.bet_placed:
                     self.send_text(selected_team, self.total_goals, self.possible_win)
             else:
-                print('Team is not available in Mozzart livebets')
+                print(f'    {self.scorer} is not available in Mozzart livebets')
 
-            print("--- %s seconds ---" % (time.time() - start_time))
+            print("--- Completed in %s seconds ---" % (time.time() - start_time))
             
-            if self.count % 500 == 0:
-                self.get_balance()
-                threshold = self.stake * 10    
-
             self.prev_msg = msg
             break
         conn.close()
         try:
             login = self.driver.find_element_by_xpath("//*[@class='login-btn']")
+            phone_no = self.driver.find_element_by_xpath("//*[@placeholder='Mobile number']")
+            passwrd = self.driver.find_element_by_xpath("//*[@placeholder='Password']")
         except:
             logged_in = True
         else:
-            phone_no = self.driver.find_element_by_xpath("//*[@placeholder='Mobile number']")
-            passwrd = self.driver.find_element_by_xpath("//*[@placeholder='Password']")
             phone_no.clear()
-            passwrd.clear()
             phone_no.send_keys(self.phone)
+            passwrd.clear()
             passwrd.send_keys(self.password)
             login.click()
-            print('Logged in again')
+            print('    Logged in again')
 
         self.count += 1
     
     #check balance
     def get_balance(self):
         try:
-            money = WebDriverWait(self.driver, 15).until(
-                EC.presence_of_element_located((By.XPATH, ".//div[@class='flex column betting-balance']//p[@class='money']"))
-            )
+            money = self.driver.find_element_by_xpath(".//div[@class='flex column betting-balance']//p[@class='money']")
             amount_available = money.text
-            print(f'Balance: {amount_available}')
-            self.stake = float(amount_available) / 4
         except:
-            print('Unable to retrieve balance')
-        
+            print('    Unable to retrieve balance')
+        else:
+            balance = float(amount_available.replace(',', ''))
+            rounded_balance = math.floor(balance / 100) * 100
+            self.stake = rounded_balance
     
     #strip received message
     def strip_msg(self, msg):
@@ -187,7 +176,7 @@ class Mozzart:
             total_goals = (msg[half + 1 :])
             self.scorer, self.total_goals = scorer, total_goals
         else:
-            print('Incomplete message')
+            print('    Incomplete message')
             self.scorer, self.total_goals = 'Null', 0
     
     #send text message 
@@ -200,7 +189,7 @@ class Mozzart:
         sms = africastalking.SMS
         message = f'Algobet has placed a bet successfully! {team} to score goal no. {goals}. Possible win: Kshs {possible_win}'
         try:
-            response = sms.send(message, self.recipients, None)
+            sms.send(message, self.recipients, None)
         except Exception as e:
             print (f'Couldn\'t send sms: {e}')
 
@@ -218,32 +207,23 @@ class Mozzart:
     def check_matches(self):
         self.home_list = []
         self.away_list = []
-        self.score_list = []
-        self.home_score_list = []
-        self.away_score_list = []
         try:
             home_teams = self.driver.find_elements_by_xpath("//*[@class='font-cond home']")
             away_teams = self.driver.find_elements_by_xpath("//*[@class='font-cond visitor']")
-            scores = self.driver.find_elements_by_xpath("//*[@class='score total']")
-            
+
         except:
-            print('Cannot find teams')
+            print('    Cannot find teams')
         else:
             for team in home_teams:
-                self.home_list.append(team.text)
-                self.home_list = self.home_list
-
+                try:
+                    self.home_list.append(team.text)
+                except:
+                    pass
             for team in away_teams:
-                self.away_list.append(team.text)
-                self.away_list = self.away_list
-            
-            for score in scores:
-                self.score_list.append(score.text)
-                home_score = score.text[:1]
-                away_score = score.text[2:]
-                self.home_score_list.append(home_score)
-                self.away_score_list.append(away_score)
-
+                try:
+                    self.away_list.append(team.text)
+                except Exception as e:
+                    pass
 
     #ascertain if selected team matches with teams on site
     def similar(self, a, b):
@@ -263,7 +243,7 @@ class Mozzart:
             try:
                 team_odd = self.driver.find_element_by_xpath(f".//div[@title='{team.upper()} will score goal number {score} in the match ']")
             except:
-                print('This bet has been suspended!')
+                print('    This bet has been suspended!')
         if team_odd:
             try:
                 team_odd.click()
@@ -300,41 +280,53 @@ class Mozzart:
                 if payout_index == 1:
                     self.possible_win = payout.text
                 payout_index += 1
-            place_bet.click()
+            '''try: 
+                self.driver.find_elements_by_xpath(".//div[@class='checkbox-box-circle']//label[@for='dont']").click()
+            except:
+                print('unable to deny changes')'''
             try:
-                close = WebDriverWait(self.driver, 6).until(
+                place_bet.click()
+            except Exception as e:
+                print(e)
+            try:
+                close = WebDriverWait(self.driver, 10).until(
 	                EC.presence_of_element_located((By.XPATH, ".//button[@class='button close']"))
 	            )
                 close.click()
                     
             except Exception as e:
                 try:
-                    WebDriverWait(self.driver, 10).until(
-                        EC.presence_of_element_located((By.XPATH, ".//button[@class='button changes']"))
+                    WebDriverWait(self.driver, 20).until(
+                        EC.presence_of_element_located((By.XPATH, ".//div[@class='pointer clear-all']//button[@class='delete-button']"))
                     ).click()
                 except:
-                    print(f'Bet might not have been placed!: {e}')
+                    print(f'    Bet might not have been placed!: {e}')
                     self.driver.get(self.url)
             else:
-                print(f'Bet placed successfully!')
+                print(f'    Bet placed successfully!')
                 self.bet_placed = True
-            
-    #enter cashout threshold
+
+    #cashout 
     def cashout(self):
-        cashout = self.driver.find_element_by_xpath(".//p[@class='header-text']//span[@class='counter']")
-        cashouts = int(cashout.text)
-        if cashouts != 0:
-            cashout_status = WebDriverWait(self.driver, 20).until(
-                        EC.presence_of_element_located((By.ID, "cashout-value"))
+        while True:
+            cashout = self.driver.find_element_by_xpath(".//p[@class='header-text']//span[@class='counter']")
+            cashouts = int(cashout.text)
+            if cashouts != 0:
+                cashout_status = WebDriverWait(self.driver, 20).until(
+                            EC.presence_of_element_located((By.ID, "cashout-value"))
+                        )
+                cashout_value = float(cashout_status.text)
+                #cashout_threshold = self.stake * 0.95
+                if cashout_value: #< cashout_threshold:
+                    cashout_button = WebDriverWait(self.driver, 20).until(
+                        EC.presence_of_element_located((By.XPATH, ".//div[@class='buttonCO']"))
                     )
-            cashout_value = float(cashout_status.text)
-            cashout_threshold = self.stake * 0.75
-            if cashout_value < cashout_threshold:
-                cashout_button = WebDriverWait(self.driver, 20).until(
-                    EC.presence_of_element_located((By.XPATH, ".//div[@class='buttonCO']"))
-                )
-                cashout_button.click()
-                print(f'Cashed out Kshs {cashout_value}')
+                    cashout_button.click()
+            else:
+                break
+
+        print(f'    Cashed out Kshs {cashout_value}')
+        self.driver.refresh()
                 
 
     #withdraw if amount given exceeds 10 times the stake
