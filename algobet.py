@@ -55,7 +55,7 @@ class Mozzart:
     def get_site(self):
         self.driver.get(self.url)
         try:
-            element = WebDriverWait(self.driver, 20).until(
+            element = WebDriverWait(self.driver, 60).until(
 	            EC.presence_of_element_located((By.XPATH, "//*[@class='cell rel part1 bg']"))
 	        )
         except:
@@ -66,10 +66,12 @@ class Mozzart:
         try:
             phone_no = self.driver.find_element_by_xpath("//*[@placeholder='Mobile number']")
             passwrd = self.driver.find_element_by_xpath("//*[@placeholder='Password']")
-            login = self.driver.find_element_by_xpath("//*[@class='login-btn']")
         except:
             print('Unable to locate login section')
         else:
+            login = WebDriverWait(self.driver, 10).until(
+	                EC.element_to_be_clickable((By.XPATH, "//*[@class='login-btn']"))
+	            )
             phone_no.send_keys(phone)
             time.sleep(5)
             passwrd.send_keys(password)
@@ -106,21 +108,25 @@ class Mozzart:
                     break
                 
                 print(f'\n--- Fetched new Flashscore data at {now} ---')
-                print(f"    New goal detected: {msg}")
-            
                 self.strip_msg(msg)
+                print(f"    New goal detected: {self.scorer} vs {self.oponent}")
+            
             self.check_matches()
             selected = False
-            prev_similarity = 0.65
+            prev_similarity = 0.55
             for team in self.home_list:
-                if self.similar(self.scorer, team) == True:
+                team_index = self.home_list.index(team)
+                rival = self.away_list[team_index]
+                if self.similar(self.scorer, team) == True and self.similar(rival, self.oponent) == True:
                     if self.similarity >= prev_similarity:
                         selected_team = team
                         selected = True
                         prev_similarity = self.similarity
 
             for team in self.away_list:
-                if self.similar(self.scorer, team) == True:
+                team_index = self.away_list.index(team)
+                rival = self.home_list[team_index]
+                if self.similar(self.scorer, team) == True and self.similar(rival, self.oponent) == True:
                     if self.similarity >= prev_similarity:
                         selected_team = team
                         selected = True
@@ -171,13 +177,17 @@ class Mozzart:
     #strip received message
     def strip_msg(self, msg):
         half = msg.find(',')
+        half_ = msg.find('-')
         if half:
             scorer = (msg[: half ])
-            total_goals = (msg[half + 1 :])
+            total_goals = (msg[half + 1 : half_])
             self.scorer, self.total_goals = scorer, total_goals
         else:
             print('    Incomplete message')
             self.scorer, self.total_goals = 'Null', 0
+        if half_:
+            oponent = (msg[half_ + 1 :])
+            self.oponent = oponent
     
     #send text message 
     def send_text(self, team, goals, possible_win):
@@ -229,7 +239,7 @@ class Mozzart:
     def similar(self, a, b):
         similarity =  SequenceMatcher(None, a, b).ratio()
         self.similarity = similarity
-        if similarity > 0.65:
+        if similarity > 0.55:
             return True
         else:
             return False

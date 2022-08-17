@@ -13,6 +13,7 @@ class Flashscore():
         self.message = ''
         self.total_goals = 0
         self.team = ''
+        self.oponent = ''
 
         PATH="C:\Program Files (x86)\chromedriver.exe"
         chrome_options = webdriver.ChromeOptions()
@@ -57,7 +58,7 @@ class Flashscore():
             return False
 
     def process_message(self):
-        msg = f'{self.team},{self.total_goals}'
+        msg = f'{self.team},{self.total_goals}-{self.oponent}'
         if msg not in self.bet_list:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             host = "127.0.0.1"
@@ -77,7 +78,7 @@ class Flashscore():
             except:
                 print('message not sent')
 
-            print(msg)
+            print(f'{self.team}, goal number {self.total_goals} against {self.oponent}')
         if len(self.bet_list) > 10:
             self.bet_list.pop(0)
 
@@ -112,8 +113,9 @@ class Flashscore():
                             #if el.find_element(By.XPATH, './/div[@class="event__participant event__participant--home highlighted"]'):
                                 # only pick the team name, first 10 strings
                                 home_team = el.find_element(By.XPATH, './/div[@class="event__participant event__participant--home highlighted"]').text
-                                #away_team = el.find_element(By.XPATH, './/div[@class="event__participant event__participant--away"]').text
+                                away_team = el.find_element(By.XPATH, './/div[@class="event__participant event__participant--away"]').text
                                 self.team = ''.join(home_team.replace('GOAL', '').splitlines())
+                                self.oponent = away_team
 
                                 home_score = int((el.find_element(By.XPATH, './/div[@class="event__score event__score--home highlighted"]')).text)
                                 away_score = int((el.find_element(By.XPATH, './/div[@class="event__score event__score--away"]')).text)
@@ -129,8 +131,10 @@ class Flashscore():
                         if self.has_xpath(xpath2, el):
                             try:
                                 away_team = el.find_element(By.XPATH, './/div[@class="event__participant event__participant--away highlighted"]').text
+                                home_team = el.find_element(By.XPATH, './/div[@class="event__participant event__participant--home"]').text
                                 self.team = ''.join(away_team.replace('GOAL', '').splitlines())
-
+                                self.oponent = home_team
+                                
                                 home_score = int((el.find_element(By.XPATH, './/div[@class="event__score event__score--home"]')).text)
                                 away_score = int((el.find_element(By.XPATH, './/div[@class="event__score event__score--away highlighted"]')).text)
 
