@@ -7,6 +7,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 from difflib import SequenceMatcher
+from fuzzywuzzy import fuzz
 import socket
 import sys
 import threading
@@ -33,8 +34,8 @@ class Mozzart:
         self.url = 'https://www.mozzartbet.co.ke/en#/live/sport/1'
         self.stake = 200
         self.prev_msg = ''
-        self.phone = '0768804671'
-        self.password = '7840NorTh'
+        self.phone = '0712897106'
+        self.password = 'Vin2am@254'
         self.bet_placed = False
         self.similarity = 0.00
         self.recipients = []
@@ -113,41 +114,56 @@ class Mozzart:
             
             self.check_matches()
             selected = False
-            prev_similarity = 0.55
+            prev_similarity = 0.5
             for team in self.home_list:
                 team_index = self.home_list.index(team)
-                rival = self.away_list[team_index]
-                if self.similar(self.scorer, team) == True and self.similar(rival, self.oponent) == True:
-                    if self.similarity >= prev_similarity:
-                        selected_team = team
-                        selected = True
-                        prev_similarity = self.similarity
+                try:
+                    rival = self.away_list[team_index]
+                except:
+                    pass
+                if self.fuzz_similar(self.scorer, team) == True:
+                    if self.fuzz_similar(rival, self.oponent) == True:
+                        if self.similarity >= prev_similarity:
+                            selected_team = team
+                            selected = True
+                            prev_similarity = self.similarity
 
             for team in self.away_list:
                 team_index = self.away_list.index(team)
-                rival = self.home_list[team_index]
-                if self.similar(self.scorer, team) == True and self.similar(rival, self.oponent) == True:
-                    if self.similarity >= prev_similarity:
-                        selected_team = team
-                        selected = True
-                        prev_similarity = self.similarity
+                try:
+                    rival = self.home_list[team_index]
+                except:
+                    pass
+
+                if self.fuzz_similar(self.scorer, team) == True:
+                    if self.fuzz_similar(rival, self.oponent) == True:
+                        if self.similarity >= prev_similarity:
+                            selected_team = team
+                            selected = True
+                            prev_similarity = self.similarity
 
             if selected:
                 print(f'    {selected_team} to score goal number {self.total_goals}')
                 self.get_balance()
-                self.get_slip(selected_team, int(self.total_goals))
-                if self.bet_placed:
-                    self.send_text(selected_team, self.total_goals, self.possible_win)
+                try:
+                    self.total_goals = int(self.total_goals)
+                except:
+                    print('    Goal number was erroneous')
+                else:
+                    self.get_slip(selected_team, self.total_goals)
+                    if self.bet_placed:
+                        self.send_text(selected_team, self.total_goals, self.possible_win)
             else:
                 print(f'    {self.scorer} is not available in Mozzart livebets')
 
             print("--- Completed in %s seconds ---" % (time.time() - start_time))
+            if self.bet_placed:
+                time.sleep(15)
             
             self.prev_msg = msg
             break
         conn.close()
         try:
-            login = self.driver.find_element_by_xpath("//*[@class='login-btn']")
             phone_no = self.driver.find_element_by_xpath("//*[@placeholder='Mobile number']")
             passwrd = self.driver.find_element_by_xpath("//*[@placeholder='Password']")
         except:
@@ -157,15 +173,25 @@ class Mozzart:
             phone_no.send_keys(self.phone)
             passwrd.clear()
             passwrd.send_keys(self.password)
-            login.click()
-            print('    Logged in again')
+            time.sleep(2)
+            try:
+                WebDriverWait(self.driver, 20).until(
+                    EC.presence_of_element_located((By.XPATH, "//*[@class='login-btn']"))
+                ).click()
+                print('\n    Logged in again')
+            except:
+                print('    Failed to login')
 
         self.count += 1
+        if self.count % 50 == 0:
+            self.driver.refresh()
     
     #check balance
     def get_balance(self):
         try:
-            money = self.driver.find_element_by_xpath(".//div[@class='flex column betting-balance']//p[@class='money']")
+            money = WebDriverWait(self.driver, 5).until(
+	            EC.presence_of_element_located((By.XPATH, ".//div[@class='flex column betting-balance']//p[@class='money']"))
+	        )
             amount_available = money.text
         except:
             print('    Unable to retrieve balance')
@@ -234,12 +260,12 @@ class Mozzart:
                     self.away_list.append(team.text)
                 except Exception as e:
                     pass
-
+    
     #ascertain if selected team matches with teams on site
-    def similar(self, a, b):
-        similarity =  SequenceMatcher(None, a, b).ratio()
-        self.similarity = similarity
-        if similarity > 0.55:
+    def fuzz_similar(self, a, b):
+        similarity = fuzz.token_sort_ratio(a, b)
+        self.similarity = similarity / 100
+        if self.similarity > 0.5:
             return True
         else:
             return False
@@ -305,14 +331,22 @@ class Mozzart:
                 close.click()
                     
             except Exception as e:
-                try:
-                    WebDriverWait(self.driver, 20).until(
-                        EC.presence_of_element_located((By.XPATH, ".//div[@class='pointer clear-all']//button[@class='delete-button']"))
-                    ).click()
-                except:
-                    print(f'    Bet might not have been placed!: {e}')
-                    self.driver.get(self.url)
-            else:
+                print('    Could not press close button')
+                WebDriverWait(self.driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//div[@class='clear-all']//span[@class='clear-button']"))
+                ).click()
+
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//div[@class='pointer clear-all']//button[@class='delete-button']"))
+                ).click()
+            except:
+                print(f'    This bet might not have been placed!')
+                #self.driver.get(self.url)
+            #else:
+            time.sleep(3)
+            self.get_balance()
+            if self.stake == 0.00:
                 print(f'    Bet placed successfully!')
                 self.bet_placed = True
 

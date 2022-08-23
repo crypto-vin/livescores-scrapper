@@ -58,6 +58,11 @@ class Flashscore():
             return False
 
     def process_message(self):
+        correction = False
+        if self.team[ -10: ] == 'CORRECTION':
+            correction = True
+            self.team = self.team[ : -10] 
+    
         msg = f'{self.team},{self.total_goals}-{self.oponent}'
         if msg not in self.bet_list:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -78,7 +83,11 @@ class Flashscore():
             except:
                 print('message not sent')
 
-            print(f'{self.team}, goal number {self.total_goals} against {self.oponent}')
+            if correction:
+                print(f'CORRECTION: {self.team}\'s goal number {int(self.total_goals) + 1} against {self.oponent} disallowed')
+            else:
+                print(f'{self.team}, goal number {self.total_goals} against {self.oponent}')
+
         if len(self.bet_list) > 10:
             self.bet_list.pop(0)
 
